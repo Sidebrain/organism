@@ -57,7 +57,6 @@ class AudioSense:
         file_tuple = (
             original_audio_file.filename,
             buffer,
-            # original_audio_file.content_type,
             "audio/mp3",
         )
         return index, await self.intelligence_client.audio.transcriptions.create(
