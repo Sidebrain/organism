@@ -1,9 +1,7 @@
-import io
-
 from fastapi import UploadFile
 from openai import AsyncOpenAI
 from openai.types.audio import TranscriptionVerbose
-from pydub import AudioSegment  # type: ignore
+
 
 class AudioSense:
     def __init__(self, intelligence_client: AsyncOpenAI) -> None:
@@ -11,11 +9,11 @@ class AudioSense:
 
     async def transcribe(self, audio_file: UploadFile) -> TranscriptionVerbose:
         audio_file.file.seek(0)
-        audio = AudioSegment.from_file(audio_file.file)
-        buffer = io.BytesIO()
-        audio.export(buffer, format="ipod")
-        buffer.seek(0)
-        file_tuple = (audio_file.filename, buffer, "audio/m4a")
+        # audio = AudioSegment.from_file(audio_file.file)
+        # buffer = io.BytesIO()
+        # audio.export(buffer, format="ipod")
+        # buffer.seek(0)
+        file_tuple = (audio_file.filename, audio_file.file, audio_file.content_type)
 
         try:
             transcription = await self.intelligence_client.audio.transcriptions.create(
