@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from .transcription import app as transcription_router
+from .transcription import router as transcription_router
 
 router = APIRouter(prefix="/v1", tags=["v1"])
 
