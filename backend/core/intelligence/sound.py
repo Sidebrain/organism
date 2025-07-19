@@ -23,6 +23,9 @@ class AudioSense:
     def __init__(self, intelligence_client: AsyncOpenAI) -> None:
         self.intelligence_client = intelligence_client
 
+    def __repr__(self) -> str:
+        return "AudioSense(intelligence_client_wrapper_openai)"
+
     def determine_audio_format(self, audio_file: UploadFile) -> str:
         """Determine audio format from filename or content-type with fallback"""
 
@@ -143,6 +146,7 @@ class AudioSense:
             f"Processing {len(segments)} segments of {chunk_size_ms / 1000:.1f}s each"
         )
 
+    @time_it
     def export_audio_to_optimal_format(
         self, segment: AudioSegment, buffer: io.BytesIO, detected_audio_format: str
     ) -> tuple[str, str]:
