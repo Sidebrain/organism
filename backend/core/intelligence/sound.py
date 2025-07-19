@@ -26,6 +26,10 @@ class AudioSense:
     def __repr__(self) -> str:
         return "AudioSense(intelligence_client_wrapper_openai)"
 
+    # ============================================================================
+    # FILE HANDLING AND FORMAT DETECTION
+    # ============================================================================
+
     def determine_audio_format(self, audio_file: UploadFile) -> str:
         """Determine audio format from filename or content-type with fallback"""
 
@@ -78,6 +82,10 @@ class AudioSense:
         file_size_kb = calculate_file_size_in_kilobytes(audio_file)
         print(f"Size of audio file in {file_format} in kb: {file_size_kb}")
 
+    # ============================================================================
+    # AUDIO LOADING AND PROCESSING
+    # ============================================================================
+
     def load_audio_with_fallback(
         self, audio_file: UploadFile, file_format: str
     ) -> AudioSegment:
@@ -122,6 +130,10 @@ class AudioSense:
             return speedup(audio, speed_up_factor)
         return audio
 
+    # ============================================================================
+    # AUDIO SEGMENTATION AND CHUNKING
+    # ============================================================================
+
     def calculate_optimal_chunk_duration(self, audio_duration_ms: int) -> int:
         """Calculate optimal chunk duration based on audio length and OpenAI limits"""
 
@@ -145,6 +157,40 @@ class AudioSense:
         print(
             f"Processing {len(segments)} segments of {chunk_size_ms / 1000:.1f}s each"
         )
+
+    # ============================================================================
+    # AUDIO EXPORT AND FORMAT OPTIMIZATION
+    # ============================================================================
+
+    def should_use_m4a_fast_path(
+        self, detected_format: str, speed_up_factor: float, file_size_bytes: int
+    ) -> bool:
+        """Determine if we can use the m4a fast path optimization"""
+        # Rough estimate: 1MB ≈ 8 minutes of audio at typical bitrates
+        estimated_duration_ms = (file_size_bytes / 1024 / 1024) * 8 * 60 * 1000
+
+        return (
+            detected_format == "m4a"
+            and speed_up_factor == 1.0
+            and estimated_duration_ms <= MAX_CHUNK_DURATION_MS
+        )
+
+    async def transcribe_m4a_directly(
+        self, audio_file: UploadFile
+    ) -> list[TranscriptionVerbose | Transcription]:
+        """Direct transcription for m4a files without re-encoding"""
+
+        def create_direct_file_tuple(
+            audio_file: UploadFile,
+        ) -> tuple[str, io.BytesIO, str]:
+            """Create file tuple directly from original m4a data"""
+            buffer = io.BytesIO(audio_file.file.read())
+            buffer.seek(0)
+            return (audio_file.filename or "audio.m4a", buffer, "audio/m4a")
+
+        file_tuple = create_direct_file_tuple(audio_file)
+        transcription = await self.transcribe_audio_segment(file_tuple)
+        return [transcription]
 
     @time_it
     def export_audio_to_optimal_format(
@@ -183,6 +229,10 @@ class AudioSense:
 
         segment.export(buffer, format=optimal_export_format, bitrate=optimal_bitrate)
         return optimal_export_format, optimal_bitrate
+
+    # ============================================================================
+    # TRANSCRIPTION PROCESSING
+    # ============================================================================
 
     async def transcribe_audio_segment(
         self, file_tuple: tuple[str, io.BytesIO, str]
@@ -274,35 +324,9 @@ class AudioSense:
         sorted_segments = sort_transcriptions_by_index(transcription_segments)
         return extract_transcription_results(sorted_segments)
 
-    async def transcribe_m4a_directly(
-        self, audio_file: UploadFile
-    ) -> list[TranscriptionVerbose | Transcription]:
-        """Direct transcription for m4a files without re-encoding"""
-
-        def create_direct_file_tuple(
-            audio_file: UploadFile,
-        ) -> tuple[str, io.BytesIO, str]:
-            """Create file tuple directly from original m4a data"""
-            buffer = io.BytesIO(audio_file.file.read())
-            buffer.seek(0)
-            return (audio_file.filename or "audio.m4a", buffer, "audio/m4a")
-
-        file_tuple = create_direct_file_tuple(audio_file)
-        transcription = await self.transcribe_audio_segment(file_tuple)
-        return [transcription]
-
-    def should_use_m4a_fast_path(
-        self, detected_format: str, speed_up_factor: float, file_size_bytes: int
-    ) -> bool:
-        """Determine if we can use the m4a fast path optimization"""
-        # Rough estimate: 1MB ≈ 8 minutes of audio at typical bitrates
-        estimated_duration_ms = (file_size_bytes / 1024 / 1024) * 8 * 60 * 1000
-
-        return (
-            detected_format == "m4a"
-            and speed_up_factor == 1.0
-            and estimated_duration_ms <= MAX_CHUNK_DURATION_MS
-        )
+    # ============================================================================
+    # MAIN TRANSCRIPTION PIPELINE
+    # ============================================================================
 
     @time_it
     async def transcribe(
