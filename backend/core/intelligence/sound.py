@@ -274,6 +274,36 @@ class AudioSense:
         sorted_segments = sort_transcriptions_by_index(transcription_segments)
         return extract_transcription_results(sorted_segments)
 
+    async def transcribe_m4a_directly(
+        self, audio_file: UploadFile
+    ) -> list[TranscriptionVerbose | Transcription]:
+        """Direct transcription for m4a files without re-encoding"""
+
+        def create_direct_file_tuple(
+            audio_file: UploadFile,
+        ) -> tuple[str, io.BytesIO, str]:
+            """Create file tuple directly from original m4a data"""
+            buffer = io.BytesIO(audio_file.file.read())
+            buffer.seek(0)
+            return (audio_file.filename or "audio.m4a", buffer, "audio/m4a")
+
+        file_tuple = create_direct_file_tuple(audio_file)
+        transcription = await self.transcribe_audio_segment(file_tuple)
+        return [transcription]
+
+    def should_use_m4a_fast_path(
+        self, detected_format: str, speed_up_factor: float, file_size_bytes: int
+    ) -> bool:
+        """Determine if we can use the m4a fast path optimization"""
+        # Rough estimate: 1MB ≈ 8 minutes of audio at typical bitrates
+        estimated_duration_ms = (file_size_bytes / 1024 / 1024) * 8 * 60 * 1000
+
+        return (
+            detected_format == "m4a"
+            and speed_up_factor == 1.0
+            and estimated_duration_ms <= MAX_CHUNK_DURATION_MS
+        )
+
     @time_it
     async def transcribe(
         self,
@@ -286,6 +316,14 @@ class AudioSense:
         detected_audio_format = self.determine_audio_format(audio_file)
         self.log_file_information(audio_file, detected_audio_format)
 
+        # Fast path optimization for m4a files
+        if self.should_use_m4a_fast_path(
+            detected_audio_format, speed_up_factor, audio_file.size or 0
+        ):
+            print("Using m4a fast path - skipping re-encoding")
+            return await self.transcribe_m4a_directly(audio_file)
+
+        # Existing pipeline for all other cases
         raw_audio = self.load_audio_with_fallback(reset_file, detected_audio_format)
         processed_audio = self.apply_speed_modification(raw_audio, speed_up_factor)
 
