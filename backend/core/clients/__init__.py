@@ -18,3 +18,5 @@ async def get_openai_async_client() -> AsyncGenerator[AsyncOpenAI, None]:
         print("client killed")
         pass
 
+
+
