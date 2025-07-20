@@ -87,13 +87,12 @@ class AudioExporter:
         self, detected_format: str, speed_up_factor: float, file_size_bytes: int
     ) -> bool:
         """Determine if we can use the m4a fast path optimization"""
-        # Rough estimate: 1MB ≈ 8 minutes of audio at typical bitrates
-        estimated_duration_ms = (file_size_bytes / 1024 / 1024) * 8 * 60 * 1000
+        MAX_FILE_SIZE_MB = 24 * 1024 * 1024  # 24 mb
 
         return (
             detected_format == "m4a"
             and speed_up_factor == 1.0
-            and estimated_duration_ms <= self.max_chunk_duration_ms
+            and file_size_bytes <= MAX_FILE_SIZE_MB
         )
 
     def export_audio_to_optimal_format(
@@ -103,8 +102,8 @@ class AudioExporter:
         optimal_export_format = self._determine_optimal_export_format(
             detected_audio_format
         )
-        optimal_bitrate = self._determine_optimal_bitrate(
-            detected_audio_format, len(segment) / 60000
+        optimal_bitrate = self._determine_optimal_bitrate_based_on_format(
+            detected_audio_format
         )
 
         segment.export(buffer, format=optimal_export_format, bitrate=optimal_bitrate)
@@ -123,8 +122,8 @@ class AudioExporter:
         }
         return format_optimization_map.get(detected_audio_format, "ogg")
 
-    def _determine_optimal_bitrate(
-        self, detected_audio_format: str, duration_minutes: float
+    def _determine_optimal_bitrate_based_on_format(
+        self, detected_audio_format: str
     ) -> str:
         """Choose optimal bitrate based on detected format and duration"""
         if detected_audio_format in ["m4a", "mp4"]:
