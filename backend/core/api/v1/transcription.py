@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile
 from openai.types.audio import Transcription, TranscriptionVerbose
 
 from ...clients import get_openai_async_client
-from ...intelligence.sound import AudioSense
+from ...senses.sound import AudioSense
 
 router = APIRouter(prefix="/transcription", tags=["transcription"])
 
