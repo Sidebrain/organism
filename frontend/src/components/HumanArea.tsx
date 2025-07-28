@@ -33,12 +33,6 @@ const MessageList = () => {
 const MessageInput = () => {
   const appContext = useAppContext();
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      appContext.handleSendMessage();
-    }
-  };
-
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -50,7 +44,11 @@ const MessageInput = () => {
       <input
         value={appContext.inputText}
         onChange={handleInputChange}
-        onKeyPress={handleKeyPress}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            appContext.handleSendMessage();
+          }
+        }}
         placeholder="Type your message..."
         className="flex-1 px-3 py-2 bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
       />
