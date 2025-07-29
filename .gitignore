@@ -1,2 +1,4 @@
 scripts/
 commit_details.txt
+.DS_Store
+*.m4a
