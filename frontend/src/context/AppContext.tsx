@@ -2,8 +2,12 @@ import {
   createContext,
   useContext,
   useState,
+  useRef,
+  useCallback,
   type ReactNode,
 } from "react";
+import { EventSourceHandler } from "@/lib/EventSourceHandler";
+import { BACKEND_URL } from "../../constants";
 
 export interface Message {
   id: string;
@@ -44,9 +48,64 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     generativeOnRight: true,
   });
 
-  const handleSendMessage = () => {
+  const eventSourceRef = useRef<EventSourceHandler | null>(null);
+
+  const startStreaming = useCallback(async () => {
+    const streamingMessageId = `msg_${Date.now()}`;
+
+    // Create placeholder generative message
+    const placeholderMessage: Message = {
+      id: streamingMessageId,
+      type: "generative",
+      content: "",
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, placeholderMessage]);
+
+    // Create new EventSource for this streaming session
+    const eventSource = new EventSourceHandler({
+      url: `${BACKEND_URL}/v1/chat/stream`,
+      onDelta: (content: string) => {
+        // Always use our local streamingMessageId, ignore backend messageId
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === streamingMessageId
+              ? { ...msg, content: msg.content + content }
+              : msg
+          )
+        );
+      },
+      onDone: (messageId?: string) => {
+        console.log("Streaming completed for message:", messageId);
+        if (eventSourceRef.current) {
+          eventSourceRef.current.disconnect();
+          eventSourceRef.current = null;
+        }
+      },
+      onConnectionChange: (connected: boolean) => {
+        console.log(
+          "Connection status changed:",
+          connected ? "connected" : "disconnected"
+        );
+      },
+      onError: (error: string) => {
+        console.error("EventSource connection failed:", error);
+      },
+    });
+
+    eventSourceRef.current = eventSource;
+    eventSource.connect();
+
+    // The EventSource connection should be sufficient to trigger streaming
+
+    return streamingMessageId;
+  }, []);
+
+  const handleSendMessage = useCallback(() => {
     if (!inputText.trim()) return;
 
+    // Create human message
     const newMessage: Message = {
       id: Date.now().toString(),
       type: "human",
@@ -56,7 +115,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     setMessages((prev) => [...prev, newMessage]);
     setInputText("");
-  };
+
+    // Trigger streaming for the response
+    startStreaming();
+  }, [inputText, startStreaming]);
 
   const humanMessages = messages.filter((m) => m.type === "human");
   const generativeMessages = messages.filter(

@@ -18,12 +18,13 @@ const MessageList = () => {
   return (
     <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {appContext.humanMessages.map((message) => (
-        <div key={message.id} className="bg-muted rounded-lg p-3">
-          <p className="text-sm text-muted-foreground mb-1">
-            {message.timestamp.toLocaleTimeString()}
-          </p>
-          <p>{message.content}</p>
-        </div>
+        <div key={message.id}>{message.content}</div>
+        // <div key={message.id} className="bg-muted rounded-lg p-3">
+        //   <p className="text-sm text-muted-foreground mb-1">
+        //     {message.timestamp.toLocaleTimeString()}
+        //   </p>
+        //   <p>{message.content}</p>
+        // </div>
       ))}
     </div>
   );
