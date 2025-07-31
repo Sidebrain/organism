@@ -1,6 +1,7 @@
 import os
 from typing import AsyncGenerator
 
+import socketio
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.concurrency import asynccontextmanager
@@ -33,9 +34,11 @@ async def lifecycle_manager(self) -> AsyncGenerator[None, None]:
     print("Shutting down FastAPI app")
 
 
-app = FastAPI(lifespan=lifecycle_manager)
+sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
 
-app.add_middleware(
+fastapi_app = FastAPI(lifespan=lifecycle_manager)
+
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -44,9 +47,12 @@ app.add_middleware(
 )
 
 
-app.include_router(v1_router)
+fastapi_app.include_router(v1_router)
 
 
-@app.get("/")
+@fastapi_app.get("/")
 async def index() -> dict[str, str]:
     return {"message": "Hello World"}
+
+
+app = socketio.ASGIApp(sio, fastapi_app)
