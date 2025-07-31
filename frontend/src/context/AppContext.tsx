@@ -63,11 +63,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     setMessages((prev) => [...prev, placeholderMessage]);
 
-    // Create new EventSource for this streaming session
+    // Get the last human message to send to backend
+    const lastHumanMessage = messages
+      .filter((m) => m.type === "human")
+      .pop();
+
+    if (!lastHumanMessage) {
+      console.error("No human message found to stream");
+      return;
+    }
+
+    // Create new EventSource with message as query parameter
     const eventSource = new EventSourceHandler({
-      url: `${BACKEND_URL}/v1/chat/stream`,
+      url: `${BACKEND_URL}/v1/chat/stream?message=${encodeURIComponent(
+        lastHumanMessage.content
+      )}`,
       onDelta: (content: string) => {
-        // Always use our local streamingMessageId, ignore backend messageId
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === streamingMessageId
@@ -97,10 +108,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     eventSourceRef.current = eventSource;
     eventSource.connect();
 
-    // The EventSource connection should be sufficient to trigger streaming
-
     return streamingMessageId;
-  }, []);
+  }, [messages]); // Add messages to dependency array
 
   const handleSendMessage = useCallback(() => {
     if (!inputText.trim()) return;
