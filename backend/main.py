@@ -1,13 +1,14 @@
 import os
 from typing import AsyncGenerator
 
-import socketio
+import socketio  # type: ignore[import-untyped]
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.concurrency import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.api.v1.router import router as v1_router
+from sockets import sio
 
 ## SETTINGS
 REQUIRED_ENV_VARS = [
@@ -33,8 +34,6 @@ async def lifecycle_manager(self) -> AsyncGenerator[None, None]:
     yield
     print("Shutting down FastAPI app")
 
-
-sio = socketio.AsyncServer(cors_allowed_origins="*", async_mode="asgi")
 
 fastapi_app = FastAPI(lifespan=lifecycle_manager)
 
