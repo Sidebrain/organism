@@ -9,7 +9,7 @@ interface Choice {
   finishReason?: string;
 }
 
-interface StreamingResponse {
+export interface StreamingResponse {
   id: string;
   object: string;
   created: number;

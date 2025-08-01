@@ -2,12 +2,11 @@ import {
   createContext,
   useContext,
   useState,
-  useRef,
   useCallback,
   type ReactNode,
+  useEffect,
 } from "react";
-import { EventSourceHandler } from "@/lib/EventSourceHandler";
-import { BACKEND_URL } from "../../constants";
+import { useSocket } from "@/hooks/useSocket";
 
 export interface Message {
   id: string;
@@ -47,21 +46,29 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>({
     generativeOnRight: true,
   });
+  const { socket, connect, disconnect } = useSocket({ setMessages });
 
-  const eventSourceRef = useRef<EventSourceHandler | null>(null);
+  useEffect(() => {
+    connect();
+    return () => {
+      disconnect();
+    };
+  }, [connect, disconnect]);
+
+  // const eventSourceRef = useRef<EventSourceHandler | null>(null);
 
   const startStreaming = useCallback(async () => {
-    const streamingMessageId = `msg_${Date.now()}`;
+    // const streamingMessageId = `msg_${Date.now()}`;
 
-    // Create placeholder generative message
-    const placeholderMessage: Message = {
-      id: streamingMessageId,
-      type: "generative",
-      content: "",
-      timestamp: new Date(),
-    };
+    // // Create placeholder generative message
+    // const placeholderMessage: Message = {
+    //   id: streamingMessageId,
+    //   type: "generative",
+    //   content: "",
+    //   timestamp: new Date(),
+    // };
 
-    setMessages((prev) => [...prev, placeholderMessage]);
+    // setMessages((prev) => [...prev, placeholderMessage]);
 
     // Get the last human message to send to backend
     const lastHumanMessage = messages
@@ -73,43 +80,47 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Create new EventSource with message as query parameter
-    const eventSource = new EventSourceHandler({
-      url: `${BACKEND_URL}/v1/chat/stream?message=${encodeURIComponent(
-        lastHumanMessage.content
-      )}`,
-      onDelta: (content: string) => {
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === streamingMessageId
-              ? { ...msg, content: msg.content + content }
-              : msg
-          )
-        );
-      },
-      onDone: (messageId?: string) => {
-        console.log("Streaming completed for message:", messageId);
-        if (eventSourceRef.current) {
-          eventSourceRef.current.disconnect();
-          eventSourceRef.current = null;
-        }
-      },
-      onConnectionChange: (connected: boolean) => {
-        console.log(
-          "Connection status changed:",
-          connected ? "connected" : "disconnected"
-        );
-      },
-      onError: (error: string) => {
-        console.error("EventSource connection failed:", error);
-      },
+    socket?.emit("request_chat_stream", {
+      message: lastHumanMessage.content,
     });
 
-    eventSourceRef.current = eventSource;
-    eventSource.connect();
+    // Create new EventSource with message as query parameter
+    // const eventSource = new EventSourceHandler({
+    //   url: `${BACKEND_URL}/v1/chat/stream?message=${encodeURIComponent(
+    //     lastHumanMessage.content
+    //   )}`,
+    //   onDelta: (content: string) => {
+    //     setMessages((prev) =>
+    //       prev.map((msg) =>
+    //         msg.id === streamingMessageId
+    //           ? { ...msg, content: msg.content + content }
+    //           : msg
+    //       )
+    //     );
+    //   },
+    //   onDone: (messageId?: string) => {
+    //     console.log("Streaming completed for message:", messageId);
+    //     if (eventSourceRef.current) {
+    //       eventSourceRef.current.disconnect();
+    //       eventSourceRef.current = null;
+    //     }
+    //   },
+    //   onConnectionChange: (connected: boolean) => {
+    //     console.log(
+    //       "Connection status changed:",
+    //       connected ? "connected" : "disconnected"
+    //     );
+    //   },
+    //   onError: (error: string) => {
+    //     console.error("EventSource connection failed:", error);
+    //   },
+    // });
 
-    return streamingMessageId;
-  }, [messages]); // Add messages to dependency array
+    // eventSourceRef.current = eventSource;
+    // eventSource.connect();
+
+    // return streamingMessageId;
+  }, [messages, socket]); // Add messages to dependency array
 
   const handleSendMessage = useCallback(() => {
     if (!inputText.trim()) return;
@@ -126,8 +137,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setInputText("");
 
     // Trigger streaming for the response
-    startStreaming();
-  }, [inputText, startStreaming]);
+    // startStreaming();
+    socket?.emit("request_chat_stream", {
+      message: inputText,
+    });
+  }, [inputText, socket]);
 
   const humanMessages = messages.filter((m) => m.type === "human");
   const generativeMessages = messages.filter(
