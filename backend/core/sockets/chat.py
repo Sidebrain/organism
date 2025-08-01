@@ -1,19 +1,9 @@
 import time
 
-import socketio  # type: ignore[import-untyped]
-from openai import AsyncOpenAI
 from pydantic import ValidationError
 
-from core.api.v1.chat import ChatRequest, Choice, ChoiceDelta, StreamingResponse
-from core.config import OPENAI_API_KEY
-
-client = AsyncOpenAI(api_key=OPENAI_API_KEY)
-
-sio = socketio.AsyncServer(
-    cors_allowed_origins="*",
-    async_mode="asgi",
-)
-
+from ..api.v1.chat import ChatRequest, Choice, ChoiceDelta, StreamingResponse
+from . import client, sio
 
 active_connections: dict[str, dict] = {}
 
@@ -43,6 +33,7 @@ async def disconnect(sid: str) -> None:
 
 @sio.event
 async def request_chat_stream(sid: str, message: dict) -> None:
+    print(f"request_chat_stream {sid}")
     try:
         validated_message = ChatRequest.model_validate(message)
     except ValidationError as e:

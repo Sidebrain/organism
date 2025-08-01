@@ -8,7 +8,7 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.api.v1.router import router as v1_router
-from sockets import sio
+from core.sockets import register_sio_handlers, sio
 
 ## SETTINGS
 REQUIRED_ENV_VARS = [
@@ -31,6 +31,10 @@ async def lifecycle_manager(self) -> AsyncGenerator[None, None]:
     print("Loading Env Variables")
     if not check_env_vars():
         raise ValueError("Missing required environment variables")
+
+    # register socketio handlers
+    register_sio_handlers()
+
     yield
     print("Shutting down FastAPI app")
 
