@@ -138,9 +138,13 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
 
     // Trigger streaming for the response
     // startStreaming();
-    socket?.emit("request_chat_stream", {
-      message: inputText,
-    });
+    socket?.emit(
+      "request_chat_stream",
+      // inputText
+        {
+        message: inputText,
+      }
+    );
   }, [inputText, socket]);
 
   const humanMessages = messages.filter((m) => m.type === "human");

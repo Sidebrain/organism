@@ -25,3 +25,6 @@ dist-ssr
 
 # Worktrees
 iter-*
+
+# Miscellaneous
+plan.md

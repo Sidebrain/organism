@@ -1,10 +1,13 @@
-import asyncio
 import time
-from typing import AsyncGenerator
 
 import socketio  # type: ignore[import-untyped]
+from openai import AsyncOpenAI
+from pydantic import ValidationError
 
-from core.api.v1.chat import Choice, ChoiceDelta, StreamingResponse
+from core.api.v1.chat import ChatRequest, Choice, ChoiceDelta, StreamingResponse
+from core.config import OPENAI_API_KEY
+
+client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 sio = socketio.AsyncServer(
     cors_allowed_origins="*",
@@ -39,55 +42,84 @@ async def disconnect(sid: str) -> None:
 
 
 @sio.event
-async def request_chat_stream(sid: str, message: str) -> None:
-    print(f"request_chat_stream {sid}")
-    sentence = (
-        "How are you doing on this fine day? Well you see I am a very happy person and I am enjoying my time here."
-        + "I am learnign to feel comfortable in boredom, treat myself like a king, and to feel how isolation is impacting me. "
-        + "I am learning to be more patient and to be more present in the moment. "
-        + "I am learning to be more grateful for the little things in life. "
-        + "I am learning to be more present in the moment. "
-        + "I am learning to be more grateful for the little things in life. "
-    )
+async def request_chat_stream(sid: str, message: dict) -> None:
+    try:
+        validated_message = ChatRequest.model_validate(message)
+    except ValidationError as e:
+        print(f"Error: {e}")
+        return
+    try:
+        stream = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "user", "content": validated_message.message},
+            ],
+            stream=True,
+            temperature=0.7,
+            max_tokens=1000,
+        )
 
-    words = sentence.split(" ")
-
-    async def event_generator() -> AsyncGenerator[dict, None]:
         completion_id = f"chatcmpl-{int(time.time())}"
         created_time = int(time.time())
 
-        for word in words:
-            response = StreamingResponse(
+        async for chunk in stream:
+            if chunk.choices[0].delta.content is not None:
+                response = StreamingResponse(
+                    id=completion_id,
+                    created=created_time,
+                    model="gpt-4",
+                    choices=[
+                        Choice(
+                            index=0,
+                            delta=ChoiceDelta(content=chunk.choices[0].delta.content),
+                            finish_reason=None,
+                        )
+                    ],
+                )
+
+                await sio.emit(
+                    "chat_stream",
+                    {
+                        "data": response.model_dump_json(by_alias=True),
+                    },
+                    to=sid,
+                )
+
+            # Final message with finish_reason
+            final_response = StreamingResponse(
                 id=completion_id,
                 created=created_time,
                 model="gpt-4",
                 choices=[
-                    Choice(
-                        index=0,
-                        delta=ChoiceDelta(content=word + " "),
-                        finish_reason=None,
-                    )
+                    Choice(index=0, delta=ChoiceDelta(content=""), finish_reason="stop")
                 ],
             )
 
-            yield {
-                "data": response.model_dump_json(by_alias=True),
-            }
-            await asyncio.sleep(0.01)
-
-        # Final message with finish_reason
-        final_response = StreamingResponse(
-            id=completion_id,
-            created=created_time,
+            await sio.emit(
+                "chat_stream",
+                {
+                    "data": final_response.model_dump_json(by_alias=True),
+                },
+                to=sid,
+            )
+    except Exception as e:
+        print(f"Error: {e}")
+        error_response = StreamingResponse(
+            id=f"chatcmpl-{int(time.time())}",
+            created=int(time.time()),
             model="gpt-4",
             choices=[
-                Choice(index=0, delta=ChoiceDelta(content=""), finish_reason="stop")
+                Choice(
+                    index=0,
+                    delta=ChoiceDelta(content=f"Error: {str(e)}"),
+                    finish_reason="error",
+                )
             ],
         )
-
-        yield {
-            "data": final_response.model_dump_json(by_alias=True),
-        }
-
-    async for chunk in event_generator():
-        await sio.emit("chat_stream", chunk, to=sid)
+        await sio.emit(
+            "chat_stream",
+            {
+                "data": error_response.model_dump_json(by_alias=True),
+            },
+            to=sid,
+        )
