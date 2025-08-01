@@ -32,19 +32,18 @@ async def disconnect(sid: str) -> None:
 
 
 @sio.event
-async def request_chat_stream(sid: str, message: dict) -> None:
+async def request_chat_stream(sid: str, messages: dict) -> None:
     print(f"request_chat_stream {sid}")
     try:
-        validated_message = ChatRequest.model_validate(message)
+        validated_chat_request = ChatRequest.model_validate(messages)
+        messages_to_load = [msg.to_openai_message() for msg in validated_chat_request.messages]
     except ValidationError as e:
         print(f"Error: {e}")
         return
     try:
         stream = await client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": validated_message.message},
-            ],
+            messages=messages_to_load,
             stream=True,
             temperature=0.7,
             max_tokens=1000,

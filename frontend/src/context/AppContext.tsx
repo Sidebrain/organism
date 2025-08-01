@@ -41,6 +41,7 @@ interface AppContextType {
   generativeMessages: Message[];
   isConnected: boolean;
   emit: (event: string, data?: unknown) => void;
+  socket: SocketIOClient.Socket | null;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -57,7 +58,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setMessages((prev) => updateMessagesWithStreamData(prev, data));
   }, []);
 
-  const { isConnected, emit } = useSocket({
+  const { isConnected, emit, socket } = useSocket({
     onChatStream: handleChatStream,
   });
 
@@ -68,10 +69,22 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     setMessages((prev) => [...prev, newMessage]);
     setInputText("");
 
+    const messagesToSend = [
+      ...messages.map((m) => ({
+        role: m.type,
+        content: m.content,
+      })),
+      //  adding human message separately because state has not been updated yet
+      {
+        role: "human",
+        content: inputText,
+      },
+    ];
+
     emit("request_chat_stream", {
-      message: inputText,
+      messages: messagesToSend,
     });
-  }, [inputText, emit]);
+  }, [inputText, emit, messages]);
 
   const humanMessages = messages.filter((m) => m.type === "human");
   const generativeMessages = messages.filter(
@@ -94,6 +107,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         generativeMessages,
         isConnected,
         emit,
+        socket,
       }}
     >
       {children}

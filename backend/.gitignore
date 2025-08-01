@@ -170,3 +170,6 @@ pids
 tmp/
 temp/
 tests/data
+
+# Miscellaneous
+scratch.py

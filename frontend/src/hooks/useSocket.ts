@@ -51,5 +51,6 @@ export const useSocket = ({ onChatStream }: UseSocketProps) => {
   return {
     isConnected,
     emit,
+    socket: socketRef.current,
   };
 };
