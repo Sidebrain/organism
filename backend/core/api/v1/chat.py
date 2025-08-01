@@ -3,11 +3,10 @@ from typing import AsyncGenerator
 
 from fastapi import APIRouter
 from openai import AsyncOpenAI
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
 from sse_starlette.sse import EventSourceResponse
 
 from core.config import OPENAI_API_KEY
+from core.sockets.types import Choice, ChoiceDelta, StreamingResponse
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -15,37 +14,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
 
-class ChatRequest(BaseModel):
-    # conversation_id: str
-    message: str
-
-
-class ChoiceDelta(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    content: str | None = None
-    role: str | None = None
-
-
-class Choice(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    index: int
-    delta: ChoiceDelta
-    finish_reason: str | None = None
-
-
-class StreamingResponse(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-    id: str
-    object: str = "chat.completion.chunk"
-    created: int
-    model: str
-    choices: list[Choice]
-
-
-@router.get("/stream")
+@router.get("/stream", deprecated=True)
 async def chat_stream_words(message: str) -> EventSourceResponse:
     async def event_generator() -> AsyncGenerator[dict, None]:
         try:
@@ -58,15 +27,12 @@ async def chat_stream_words(message: str) -> EventSourceResponse:
                 max_tokens=1000,
             )
 
-            completion_id = f"chatcmpl-{int(time.time())}"
-            created_time = int(time.time())
-
             async for chunk in stream:
                 if chunk.choices[0].delta.content is not None:
                     response = StreamingResponse(
-                        id=completion_id,
-                        created=created_time,
-                        model="gpt-4",
+                        id=chunk.id,
+                        created=chunk.created,
+                        model=chunk.model,
                         choices=[
                             Choice(
                                 index=0,
@@ -84,9 +50,9 @@ async def chat_stream_words(message: str) -> EventSourceResponse:
 
             # Final message with finish_reason
             final_response = StreamingResponse(
-                id=completion_id,
-                created=created_time,
-                model="gpt-4",
+                id=chunk.id,
+                created=chunk.created,
+                model=chunk.model,
                 choices=[
                     Choice(index=0, delta=ChoiceDelta(content=""), finish_reason="stop")
                 ],

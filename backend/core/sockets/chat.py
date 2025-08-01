@@ -2,8 +2,8 @@ import time
 
 from pydantic import ValidationError
 
-from ..api.v1.chat import ChatRequest, Choice, ChoiceDelta, StreamingResponse
 from . import client, sio
+from .types import ChatRequest, Choice, ChoiceDelta, StreamingResponse
 
 active_connections: dict[str, dict] = {}
 
@@ -50,14 +50,11 @@ async def request_chat_stream(sid: str, message: dict) -> None:
             max_tokens=1000,
         )
 
-        completion_id = f"chatcmpl-{int(time.time())}"
-        created_time = int(time.time())
-
         async for chunk in stream:
             if chunk.choices[0].delta.content is not None:
                 response = StreamingResponse(
-                    id=completion_id,
-                    created=created_time,
+                    id=chunk.id,
+                    created=chunk.created,
                     model="gpt-4",
                     choices=[
                         Choice(
@@ -75,24 +72,26 @@ async def request_chat_stream(sid: str, message: dict) -> None:
                     },
                     to=sid,
                 )
+            elif chunk.choices[0].finish_reason is not None:
+                # Final message with finish_reason
+                final_response = StreamingResponse(
+                    id=chunk.id,
+                    created=chunk.created,
+                    model="gpt-4",
+                    choices=[
+                        Choice(
+                            index=0, delta=ChoiceDelta(content=""), finish_reason="stop"
+                        )
+                    ],
+                )
 
-            # Final message with finish_reason
-            final_response = StreamingResponse(
-                id=completion_id,
-                created=created_time,
-                model="gpt-4",
-                choices=[
-                    Choice(index=0, delta=ChoiceDelta(content=""), finish_reason="stop")
-                ],
-            )
-
-            await sio.emit(
-                "chat_stream",
-                {
-                    "data": final_response.model_dump_json(by_alias=True),
-                },
-                to=sid,
-            )
+                await sio.emit(
+                    "chat_stream",
+                    {
+                        "data": final_response.model_dump_json(by_alias=True),
+                    },
+                    to=sid,
+                )
     except Exception as e:
         print(f"Error: {e}")
         error_response = StreamingResponse(
