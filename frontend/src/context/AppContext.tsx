@@ -4,9 +4,13 @@ import {
   useState,
   useCallback,
   type ReactNode,
-  useEffect,
 } from "react";
 import { useSocket } from "@/hooks/useSocket";
+import type { StreamingResponse } from "@/lib/EventSourceHandler";
+import {
+  updateMessagesWithStreamData,
+  createHumanMessage,
+} from "@/lib/messageUtils";
 
 export interface Message {
   id: string;
@@ -35,6 +39,8 @@ interface AppContextType {
   handleSendMessage: () => void;
   humanMessages: Message[];
   generativeMessages: Message[];
+  isConnected: boolean;
+  emit: (event: string, data?: unknown) => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -46,106 +52,26 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   const [settings, setSettings] = useState<Settings>({
     generativeOnRight: true,
   });
-  const { socket, connect, disconnect } = useSocket({ setMessages });
 
-  useEffect(() => {
-    connect();
-    return () => {
-      disconnect();
-    };
-  }, [connect, disconnect]);
+  const handleChatStream = useCallback((data: StreamingResponse) => {
+    setMessages((prev) => updateMessagesWithStreamData(prev, data));
+  }, []);
 
-  // const eventSourceRef = useRef<EventSourceHandler | null>(null);
-
-  const startStreaming = useCallback(async () => {
-    // const streamingMessageId = `msg_${Date.now()}`;
-
-    // // Create placeholder generative message
-    // const placeholderMessage: Message = {
-    //   id: streamingMessageId,
-    //   type: "generative",
-    //   content: "",
-    //   timestamp: new Date(),
-    // };
-
-    // setMessages((prev) => [...prev, placeholderMessage]);
-
-    // Get the last human message to send to backend
-    const lastHumanMessage = messages
-      .filter((m) => m.type === "human")
-      .pop();
-
-    if (!lastHumanMessage) {
-      console.error("No human message found to stream");
-      return;
-    }
-
-    socket?.emit("request_chat_stream", {
-      message: lastHumanMessage.content,
-    });
-
-    // Create new EventSource with message as query parameter
-    // const eventSource = new EventSourceHandler({
-    //   url: `${BACKEND_URL}/v1/chat/stream?message=${encodeURIComponent(
-    //     lastHumanMessage.content
-    //   )}`,
-    //   onDelta: (content: string) => {
-    //     setMessages((prev) =>
-    //       prev.map((msg) =>
-    //         msg.id === streamingMessageId
-    //           ? { ...msg, content: msg.content + content }
-    //           : msg
-    //       )
-    //     );
-    //   },
-    //   onDone: (messageId?: string) => {
-    //     console.log("Streaming completed for message:", messageId);
-    //     if (eventSourceRef.current) {
-    //       eventSourceRef.current.disconnect();
-    //       eventSourceRef.current = null;
-    //     }
-    //   },
-    //   onConnectionChange: (connected: boolean) => {
-    //     console.log(
-    //       "Connection status changed:",
-    //       connected ? "connected" : "disconnected"
-    //     );
-    //   },
-    //   onError: (error: string) => {
-    //     console.error("EventSource connection failed:", error);
-    //   },
-    // });
-
-    // eventSourceRef.current = eventSource;
-    // eventSource.connect();
-
-    // return streamingMessageId;
-  }, [messages, socket]); // Add messages to dependency array
+  const { isConnected, emit } = useSocket({
+    onChatStream: handleChatStream,
+  });
 
   const handleSendMessage = useCallback(() => {
     if (!inputText.trim()) return;
 
-    // Create human message
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      type: "human",
-      content: inputText,
-      timestamp: new Date(),
-    };
-
+    const newMessage = createHumanMessage(inputText);
     setMessages((prev) => [...prev, newMessage]);
     setInputText("");
 
-    // Trigger streaming for the response
-    // startStreaming();
-    socket?.emit(
-      "request_chat_stream",
-      // inputText
-        {
-        message: inputText,
-      }
-    );
-  }, [inputText, socket]);
+    emit("request_chat_stream", {
+      message: inputText,
+    });
+  }, [inputText, emit]);
 
   const humanMessages = messages.filter((m) => m.type === "human");
   const generativeMessages = messages.filter(
@@ -166,6 +92,8 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         handleSendMessage,
         humanMessages,
         generativeMessages,
+        isConnected,
+        emit,
       }}
     >
       {children}
